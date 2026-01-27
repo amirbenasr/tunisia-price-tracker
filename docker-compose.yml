@@ -1,0 +1,121 @@
+version: '3.8'
+
+services:
+  # PostgreSQL with TimescaleDB
+  db:
+    image: timescale/timescaledb:latest-pg15
+    container_name: tunisia_tracker_db
+    environment:
+      POSTGRES_USER: tracker
+      POSTGRES_PASSWORD: tracker_dev_password
+      POSTGRES_DB: tunisia_tracker
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./scripts/init_db.sql:/docker-entrypoint-initdb.d/init.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U tracker -d tunisia_tracker"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Redis for caching and Celery broker
+  redis:
+    image: redis:7-alpine
+    container_name: tunisia_tracker_redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # FastAPI Backend
+  api:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: tunisia_tracker_api
+    environment:
+      - DATABASE_URL=postgresql+asyncpg://tracker:tracker_dev_password@db:5432/tunisia_tracker
+      - REDIS_URL=redis://redis:6379/0
+      - CELERY_BROKER_URL=redis://redis:6379/1
+      - CELERY_RESULT_BACKEND=redis://redis:6379/1
+      - DEBUG=true
+      - SECRET_KEY=dev-secret-key-change-in-production
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./backend/src:/app/src
+      - ./backend/alembic:/app/alembic
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    command: uvicorn src.main:app --host 0.0.0.0 --port 8000 --reload
+
+  # Celery Worker
+  worker:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: tunisia_tracker_worker
+    environment:
+      - DATABASE_URL=postgresql+asyncpg://tracker:tracker_dev_password@db:5432/tunisia_tracker
+      - REDIS_URL=redis://redis:6379/0
+      - CELERY_BROKER_URL=redis://redis:6379/1
+      - CELERY_RESULT_BACKEND=redis://redis:6379/1
+      - DEBUG=true
+    volumes:
+      - ./backend/src:/app/src
+      - ./backend/workers:/app/workers
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    command: celery -A workers.celery_app worker --loglevel=info --concurrency=2
+
+  # Celery Beat Scheduler
+  beat:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: tunisia_tracker_beat
+    environment:
+      - DATABASE_URL=postgresql+asyncpg://tracker:tracker_dev_password@db:5432/tunisia_tracker
+      - REDIS_URL=redis://redis:6379/0
+      - CELERY_BROKER_URL=redis://redis:6379/1
+      - CELERY_RESULT_BACKEND=redis://redis:6379/1
+    volumes:
+      - ./backend/src:/app/src
+      - ./backend/workers:/app/workers
+    depends_on:
+      - worker
+    command: celery -A workers.celery_app beat --loglevel=info
+
+  # Admin Dashboard (React)
+  admin:
+    build:
+      context: ./admin
+      dockerfile: Dockerfile
+    container_name: tunisia_tracker_admin
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./admin/src:/app/src
+      - ./admin/public:/app/public
+    environment:
+      - VITE_API_URL=http://localhost:8000
+    depends_on:
+      - api
+    command: npm run dev -- --host 0.0.0.0
+
+volumes:
+  postgres_data:
+  redis_data:

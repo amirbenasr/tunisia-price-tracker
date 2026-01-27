@@ -1,0 +1,36 @@
+# Development overrides for docker-compose
+# Usage: docker-compose -f docker-compose.yml -f docker-compose.dev.yml up
+
+version: '3.8'
+
+services:
+  api:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    volumes:
+      - ./backend:/app
+    environment:
+      - DEBUG=true
+      - PYTHONDONTWRITEBYTECODE=1
+    command: uvicorn src.main:app --host 0.0.0.0 --port 8000 --reload
+
+  worker:
+    volumes:
+      - ./backend:/app
+    environment:
+      - DEBUG=true
+    command: celery -A workers.celery_app worker --loglevel=debug --concurrency=1
+
+  beat:
+    volumes:
+      - ./backend:/app
+    command: celery -A workers.celery_app beat --loglevel=debug
+
+  admin:
+    volumes:
+      - ./admin:/app
+      - /app/node_modules
+    environment:
+      - VITE_API_URL=http://localhost:8000
+    command: npm run dev -- --host 0.0.0.0
