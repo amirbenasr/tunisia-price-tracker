@@ -190,6 +190,9 @@ export const api = {
   triggerScrape: (websiteId: string, options?: { full_scrape?: boolean; max_pages?: number }) =>
     apiClient.post(`/scrapers/${websiteId}/run`, options || {}),
 
+  stopScrape: (websiteId: string) =>
+    apiClient.post(`/scrapers/${websiteId}/stop`),
+
   getScrapeLogs: (websiteId: string, page = 1, pageSize = 20) =>
     apiClient.get<PaginatedResponse<ScrapeLog>>(`/scrapers/${websiteId}/logs`, { params: { page, page_size: pageSize } }),
 }

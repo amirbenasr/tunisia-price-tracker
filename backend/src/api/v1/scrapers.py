@@ -16,6 +16,7 @@ from src.schemas.scraper import (
     ScrapeLogResponse,
 )
 from workers.tasks.scrape import scrape_website as scrape_website_task
+from workers.celery_app import celery_app
 
 router = APIRouter(prefix="/scrapers", tags=["Scrapers"])
 
@@ -230,4 +231,45 @@ async def get_latest_scrape_log(
         duration_seconds=log.duration_seconds,
         created_at=log.created_at,
         updated_at=log.updated_at,
+    )
+
+
+@router.post("/{website_id}/stop", response_model=ScrapeJobResponse)
+async def stop_scrape(
+    website_id: UUID,
+    scraper_service: ScraperSvc,
+):
+    """
+    Stop a running scrape job for a website.
+
+    This will attempt to terminate the running task. The job cannot be resumed
+    and will be marked as cancelled.
+    """
+    # Get the latest running log
+    log = await scraper_service.get_latest_log(website_id)
+
+    if not log:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="No scrape logs found for this website",
+        )
+
+    if log.status not in ("running", "queued"):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Cannot stop scrape with status '{log.status}'. Only running or queued jobs can be stopped.",
+        )
+
+    # Revoke the Celery task
+    if log.celery_task_id:
+        celery_app.control.revoke(log.celery_task_id, terminate=True, signal="SIGTERM")
+
+    # Update log status to cancelled
+    await scraper_service.update_log(log.id, status="cancelled")
+
+    return ScrapeJobResponse(
+        task_id=log.celery_task_id or str(log.id),
+        website_id=website_id,
+        status="cancelled",
+        message="Scrape job has been stopped.",
     )

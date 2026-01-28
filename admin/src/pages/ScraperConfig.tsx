@@ -43,6 +43,7 @@ const DEFAULT_SELECTORS: Record<string, string> = {
   image: '',
   url: '',
   in_stock: '',
+  wait_for_selector: '',
 }
 
 const DEFAULT_SITEMAP_SELECTORS: Record<string, string> = {
@@ -52,6 +53,7 @@ const DEFAULT_SITEMAP_SELECTORS: Record<string, string> = {
   description: '',
   brand: '',
   in_stock: '',
+  wait_for_selector: '',
 }
 
 const DEFAULT_SITEMAP_CONFIG: SitemapConfig = {
@@ -98,9 +100,13 @@ export function ScraperConfig() {
   // Sync form state when active config loads
   useEffect(() => {
     if (activeConfig && !editMode) {
+      // Merge with defaults to ensure new fields show up
+      const defaultSelectors = activeConfig.config_type === 'sitemap'
+        ? DEFAULT_SITEMAP_SELECTORS
+        : DEFAULT_SELECTORS
       setFormState({
         config_type: activeConfig.config_type as ConfigType,
-        selectors: activeConfig.selectors || {},
+        selectors: { ...defaultSelectors, ...activeConfig.selectors },
         sitemap_config: activeConfig.sitemap_config || DEFAULT_SITEMAP_CONFIG,
       })
     }
@@ -138,9 +144,13 @@ export function ScraperConfig() {
 
   const handleEditClick = () => {
     if (activeConfig) {
+      // Merge with defaults to ensure new fields show up
+      const defaultSelectors = activeConfig.config_type === 'sitemap'
+        ? DEFAULT_SITEMAP_SELECTORS
+        : DEFAULT_SELECTORS
       setFormState({
         config_type: activeConfig.config_type as ConfigType,
-        selectors: activeConfig.selectors || {},
+        selectors: { ...defaultSelectors, ...activeConfig.selectors },
         sitemap_config: activeConfig.sitemap_config || DEFAULT_SITEMAP_CONFIG,
       })
       setEditMode(true)
@@ -191,7 +201,13 @@ export function ScraperConfig() {
   }
 
   const isSitemap = formState.config_type === 'sitemap'
-  const displaySelectors = editMode ? formState.selectors : (activeConfig?.selectors || {})
+  // Merge with defaults to show new fields even for existing configs
+  const defaultSelectorsForDisplay = activeConfig?.config_type === 'sitemap'
+    ? DEFAULT_SITEMAP_SELECTORS
+    : DEFAULT_SELECTORS
+  const displaySelectors = editMode
+    ? formState.selectors
+    : { ...defaultSelectorsForDisplay, ...(activeConfig?.selectors || {}) }
   const displaySitemapConfig = editMode ? formState.sitemap_config : (activeConfig?.sitemap_config || DEFAULT_SITEMAP_CONFIG)
 
   return (
@@ -393,11 +409,16 @@ export function ScraperConfig() {
                         <label className="mb-1 block text-sm font-medium capitalize">
                           {key.replace(/_/g, ' ')}
                         </label>
+                        {key === 'wait_for_selector' && (
+                          <p className="text-xs text-muted-foreground mb-1">
+                            Wait for this element instead of networkidle (e.g., use price selector for reliability)
+                          </p>
+                        )}
                         {editMode ? (
                           <Input
                             value={formState.selectors[key] || ''}
                             onChange={(e) => handleSelectorChange(key, e.target.value)}
-                            placeholder={`CSS selector for ${key}`}
+                            placeholder={key === 'wait_for_selector' ? 'Leave empty for default (networkidle)' : `CSS selector for ${key}`}
                           />
                         ) : (
                           <code className="block rounded bg-gray-100 p-2 text-sm">
@@ -520,10 +541,15 @@ export function ScraperConfig() {
                             {Object.keys(formState.selectors).map((key) => (
                               <div key={key} className="space-y-1">
                                 <Label className="capitalize">{key.replace(/_/g, ' ')}</Label>
+                                {key === 'wait_for_selector' && (
+                                  <p className="text-xs text-muted-foreground">
+                                    Wait for this element instead of networkidle (e.g., use price selector)
+                                  </p>
+                                )}
                                 <Input
                                   value={formState.selectors[key] || ''}
                                   onChange={(e) => handleSelectorChange(key, e.target.value)}
-                                  placeholder={`CSS selector for ${key}`}
+                                  placeholder={key === 'wait_for_selector' ? 'Leave empty for default' : `CSS selector for ${key}`}
                                 />
                               </div>
                             ))}

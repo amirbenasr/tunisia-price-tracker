@@ -40,11 +40,22 @@ class ConfigDrivenScraper(BaseScraper):
 
         self.logger.info("Starting scrape", url=current_url, max_pages=max_pages)
 
+        # Get wait strategy from config
+        wait_for_selector = self.selectors.get("wait_for_selector")
+
         while pages_scraped < max_pages:
             try:
-                # Navigate to page
-                await page.goto(current_url, wait_until="networkidle", timeout=30000)
-                await asyncio.sleep(0.5)  # Brief wait for dynamic content
+                # Navigate to page with configured wait strategy
+                if wait_for_selector:
+                    await page.goto(current_url, timeout=30000)
+                    try:
+                        await page.wait_for_selector(wait_for_selector, timeout=15000)
+                    except PlaywrightTimeout:
+                        self.logger.warning("Wait selector timeout", url=current_url, selector=wait_for_selector)
+                else:
+                    # Fallback to networkidle
+                    await page.goto(current_url, wait_until="networkidle", timeout=30000)
+                    await asyncio.sleep(0.5)  # Brief wait for dynamic content
 
                 # Extract products from current page
                 products = await self._extract_products(page)

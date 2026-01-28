@@ -149,7 +149,7 @@ class ScraperService:
             log.status = status
         if celery_task_id is not None:
             log.celery_task_id = celery_task_id
-        if status in ("success", "failed", "partial"):
+        if status in ("success", "failed", "partial", "cancelled"):
             log.completed_at = datetime.utcnow()
             log.products_found = products_found
             log.products_created = products_created
