@@ -5,12 +5,22 @@ set -e
 # Usage: ./scripts/deploy.sh [server-ip]
 
 SERVER_IP=${1:-$DEPLOY_SERVER_IP}
-SSH_KEY=${SSH_KEY:-~/.ssh/id_rsa}
+SSH_KEY=${2:-${SSH_KEY:-~/.ssh/LightsailKey.pem}}
 REMOTE_DIR="/opt/tunisia-price-tracker"
 
 if [ -z "$SERVER_IP" ]; then
-    echo "Usage: ./scripts/deploy.sh <server-ip>"
-    echo "   or: DEPLOY_SERVER_IP=x.x.x.x ./scripts/deploy.sh"
+    echo "Usage: ./scripts/deploy.sh <server-ip> [ssh-key-path]"
+    echo ""
+    echo "Examples:"
+    echo "  ./scripts/deploy.sh 1.2.3.4 ~/.ssh/LightsailKey.pem"
+    echo "  ./scripts/deploy.sh 1.2.3.4 ~/.ssh/id_rsa"
+    echo "  SSH_KEY=~/.ssh/mykey.pem ./scripts/deploy.sh 1.2.3.4"
+    exit 1
+fi
+
+if [ ! -f "$SSH_KEY" ]; then
+    echo "Error: SSH key not found at $SSH_KEY"
+    echo "Specify the key path: ./scripts/deploy.sh <ip> <path-to-key>"
     exit 1
 fi
 

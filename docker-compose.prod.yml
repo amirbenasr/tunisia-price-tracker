@@ -46,7 +46,7 @@ services:
       - CELERY_RESULT_BACKEND=redis://redis:6379/1
       - DEBUG=false
       - SECRET_KEY=${SECRET_KEY}
-      - CORS_ORIGINS=${CORS_ORIGINS:-*}
+      - CORS_ORIGINS=${CORS_ORIGINS:-["*"]}
     depends_on:
       db:
         condition: service_healthy
@@ -96,7 +96,7 @@ services:
       context: ./admin
       dockerfile: Dockerfile.prod
       args:
-        VITE_API_URL: ${VITE_API_URL:-/api}
+        VITE_API_URL: ${VITE_API_URL:-}
     container_name: tunisia_tracker_admin
     restart: unless-stopped
     depends_on:
