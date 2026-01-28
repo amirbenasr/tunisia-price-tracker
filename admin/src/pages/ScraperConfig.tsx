@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useParams } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { Save, Play, RefreshCw, Plus, FileText, Globe } from 'lucide-react'
+import { Save, Play, RefreshCw, Plus, FileText, Globe, Square } from 'lucide-react'
 import { Header } from '@/components/layout/Header'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -141,6 +141,18 @@ export function ScraperConfig() {
       queryClient.invalidateQueries({ queryKey: ['scrape-logs', websiteId] })
     },
   })
+
+  const stopScrape = useMutation({
+    mutationFn: () => api.stopScrape(websiteId!),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['scrape-logs', websiteId] })
+    },
+  })
+
+  // Check if there's a running scrape
+  const hasRunningScrape = logs?.items.some(
+    (log) => log.status === 'running' || log.status === 'queued'
+  )
 
   const handleEditClick = () => {
     if (activeConfig) {
@@ -580,14 +592,26 @@ export function ScraperConfig() {
                 <CardTitle>Scrape Controls</CardTitle>
               </CardHeader>
               <CardContent className="space-y-4">
-                <Button
-                  className="w-full"
-                  onClick={() => triggerScrape.mutate()}
-                  disabled={triggerScrape.isPending || !website?.is_active || !activeConfig}
-                >
-                  <Play className="mr-2 h-4 w-4" />
-                  {triggerScrape.isPending ? 'Starting...' : 'Run Scrape Now'}
-                </Button>
+                <div className="flex gap-2">
+                  <Button
+                    className="flex-1"
+                    onClick={() => triggerScrape.mutate()}
+                    disabled={triggerScrape.isPending || !website?.is_active || !activeConfig || hasRunningScrape}
+                  >
+                    <Play className="mr-2 h-4 w-4" />
+                    {triggerScrape.isPending ? 'Starting...' : 'Run Scrape Now'}
+                  </Button>
+                  {hasRunningScrape && (
+                    <Button
+                      variant="destructive"
+                      onClick={() => stopScrape.mutate()}
+                      disabled={stopScrape.isPending}
+                    >
+                      <Square className="mr-2 h-4 w-4" />
+                      {stopScrape.isPending ? 'Stopping...' : 'Stop'}
+                    </Button>
+                  )}
+                </div>
 
                 <div className="grid grid-cols-2 gap-4 text-sm">
                   <div>
