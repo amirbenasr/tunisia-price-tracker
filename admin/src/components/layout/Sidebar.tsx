@@ -1,4 +1,4 @@
-import { NavLink } from 'react-router-dom'
+import { NavLink, useNavigate } from 'react-router-dom'
 import {
   LayoutDashboard,
   Globe,
@@ -7,8 +7,10 @@ import {
   Settings,
   Bot,
   TrendingDown,
+  LogOut,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { useAuth } from '@/contexts/AuthContext'
 
 const navigation = [
   { name: 'Dashboard', href: '/', icon: LayoutDashboard },
@@ -21,6 +23,14 @@ const navigation = [
 ]
 
 export function Sidebar() {
+  const { logout } = useAuth()
+  const navigate = useNavigate()
+
+  const handleLogout = () => {
+    logout()
+    navigate('/login')
+  }
+
   return (
     <div className="flex h-full w-64 flex-col bg-gray-900">
       {/* Logo */}
@@ -51,7 +61,14 @@ export function Sidebar() {
 
       {/* Footer */}
       <div className="border-t border-gray-800 p-4">
-        <p className="text-xs text-gray-400">Tunisia Price Tracker v0.1.0</p>
+        <button
+          onClick={handleLogout}
+          className="flex w-full items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium text-gray-300 transition-colors hover:bg-gray-800 hover:text-white"
+        >
+          <LogOut className="h-5 w-5" />
+          Logout
+        </button>
+        <p className="mt-3 text-xs text-gray-400">Tunisia Price Tracker v0.1.0</p>
       </div>
     </div>
   )

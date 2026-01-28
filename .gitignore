@@ -67,6 +67,9 @@ logs/
 # Docker
 docker-compose.override.yml
 
+# SSL certificates
+nginx/certs/
+
 # Temporary files
 *.tmp
 *.temp
