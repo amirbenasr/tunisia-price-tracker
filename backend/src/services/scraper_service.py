@@ -128,13 +128,14 @@ class ScraperService:
     async def update_log(
         self,
         log_id: UUID,
-        status: str,
+        status: Optional[str] = None,
         products_found: int = 0,
         products_created: int = 0,
         products_updated: int = 0,
         prices_recorded: int = 0,
         pages_scraped: int = 0,
         errors: Optional[List[Dict[str, Any]]] = None,
+        celery_task_id: Optional[str] = None,
     ) -> Optional[ScrapeLog]:
         """Update a scrape log with results."""
         stmt = select(ScrapeLog).where(ScrapeLog.id == log_id)
@@ -144,25 +145,27 @@ class ScraperService:
         if not log:
             return None
 
-        log.status = status
-        log.completed_at = datetime.utcnow()
-        log.products_found = products_found
-        log.products_created = products_created
-        log.products_updated = products_updated
-        log.prices_recorded = prices_recorded
-        log.pages_scraped = pages_scraped
-        log.errors = errors or []
+        if status is not None:
+            log.status = status
+        if celery_task_id is not None:
+            log.celery_task_id = celery_task_id
+        if status in ("success", "failed", "partial"):
+            log.completed_at = datetime.utcnow()
+            log.products_found = products_found
+            log.products_created = products_created
+            log.products_updated = products_updated
+            log.prices_recorded = prices_recorded
+            log.pages_scraped = pages_scraped
+            log.errors = errors or []
+            # Update website last_scraped_at only on completion
+            await self.db.execute(
+                update(Website)
+                .where(Website.id == log.website_id)
+                .values(last_scraped_at=datetime.utcnow())
+            )
 
         await self.db.commit()
         await self.db.refresh(log)
-
-        # Update website last_scraped_at
-        await self.db.execute(
-            update(Website)
-            .where(Website.id == log.website_id)
-            .values(last_scraped_at=datetime.utcnow())
-        )
-        await self.db.commit()
 
         return log
 

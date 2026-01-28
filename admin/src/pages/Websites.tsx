@@ -1,34 +1,85 @@
-import { useState } from 'react'
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { Plus, ExternalLink, Play, Settings } from 'lucide-react'
-import { Link } from 'react-router-dom'
-import { Header } from '@/components/layout/Header'
-import { Button } from '@/components/ui/button'
-import { Badge } from '@/components/ui/badge'
+import { useState } from "react";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { Plus, ExternalLink, Play, Settings } from "lucide-react";
+import { Link } from "react-router-dom";
+import { Header } from "@/components/layout/Header";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import {
   Card,
   CardContent,
   CardDescription,
   CardHeader,
   CardTitle,
-} from '@/components/ui/card'
-import api, { Website } from '@/api/client'
-import { formatRelativeTime } from '@/lib/utils'
+} from "@/components/ui/card";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
+import api, { Website } from "@/api/client";
+import { formatRelativeTime } from "@/lib/utils";
+
+interface WebsiteFormData {
+  name: string;
+  base_url: string;
+  description: string;
+  scraper_type: string;
+  rate_limit_ms: number;
+}
+
+const initialFormData: WebsiteFormData = {
+  name: "",
+  base_url: "",
+  description: "",
+  scraper_type: "generic",
+  rate_limit_ms: 1000,
+};
 
 export function Websites() {
-  const queryClient = useQueryClient()
+  const queryClient = useQueryClient();
+  const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const [formData, setFormData] = useState<WebsiteFormData>(initialFormData);
 
   const { data, isLoading } = useQuery({
-    queryKey: ['websites'],
+    queryKey: ["websites"],
     queryFn: () => api.getWebsites(1, 100).then((res) => res.data),
-  })
+  });
 
   const triggerScrape = useMutation({
     mutationFn: (websiteId: string) => api.triggerScrape(websiteId),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['websites'] })
+      queryClient.invalidateQueries({ queryKey: ["websites"] });
     },
-  })
+  });
+
+  const createWebsite = useMutation({
+    mutationFn: (data: WebsiteFormData) => api.createWebsite(data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["websites"] });
+      setIsDialogOpen(false);
+      setFormData(initialFormData);
+    },
+  });
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    createWebsite.mutate(formData);
+  };
+
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const { name, value, type } = e.target;
+    setFormData((prev) => ({
+      ...prev,
+      [name]: type === "number" ? parseInt(value, 10) || 0 : value,
+    }));
+  };
 
   if (isLoading) {
     return (
@@ -38,7 +89,7 @@ export function Websites() {
           <p>Loading...</p>
         </div>
       </div>
-    )
+    );
   }
 
   return (
@@ -50,10 +101,95 @@ export function Websites() {
           <p className="text-muted-foreground">
             Manage competitor websites to track prices from
           </p>
-          <Button>
-            <Plus className="mr-2 h-4 w-4" />
-            Add Website
-          </Button>
+          <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+            <DialogTrigger asChild>
+              <Button>
+                <Plus className="mr-2 h-4 w-4" />
+                Add Website
+              </Button>
+            </DialogTrigger>
+            <DialogContent>
+              <form onSubmit={handleSubmit}>
+                <DialogHeader>
+                  <DialogTitle>Add New Website</DialogTitle>
+                  <DialogDescription>
+                    Add a new competitor website to track prices from.
+                  </DialogDescription>
+                </DialogHeader>
+                <div className="grid gap-4 py-4">
+                  <div className="grid gap-2">
+                    <Label htmlFor="name">Name</Label>
+                    <Input
+                      id="name"
+                      name="name"
+                      placeholder="e.g., Tunisianet"
+                      value={formData.name}
+                      onChange={handleInputChange}
+                      required
+                    />
+                  </div>
+                  <div className="grid gap-2">
+                    <Label htmlFor="base_url">Base URL</Label>
+                    <Input
+                      id="base_url"
+                      name="base_url"
+                      type="url"
+                      placeholder="e.g., https://www.tunisianet.com.tn"
+                      value={formData.base_url}
+                      onChange={handleInputChange}
+                      required
+                    />
+                  </div>
+                  <div className="grid gap-2">
+                    <Label htmlFor="description">Description (optional)</Label>
+                    <Input
+                      id="description"
+                      name="description"
+                      placeholder="Brief description of the website"
+                      value={formData.description}
+                      onChange={handleInputChange}
+                    />
+                  </div>
+                  <div className="grid gap-2">
+                    <Label htmlFor="scraper_type">Scraper Type</Label>
+                    <Input
+                      id="scraper_type"
+                      name="scraper_type"
+                      placeholder="e.g., generic, tunisianet, mytek"
+                      value={formData.scraper_type}
+                      onChange={handleInputChange}
+                      required
+                    />
+                  </div>
+                  <div className="grid gap-2">
+                    <Label htmlFor="rate_limit_ms">Rate Limit (ms)</Label>
+                    <Input
+                      id="rate_limit_ms"
+                      name="rate_limit_ms"
+                      type="number"
+                      min={100}
+                      placeholder="1000"
+                      value={formData.rate_limit_ms}
+                      onChange={handleInputChange}
+                      required
+                    />
+                  </div>
+                </div>
+                <DialogFooter>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => setIsDialogOpen(false)}
+                  >
+                    Cancel
+                  </Button>
+                  <Button type="submit" disabled={createWebsite.isPending}>
+                    {createWebsite.isPending ? "Adding..." : "Add Website"}
+                  </Button>
+                </DialogFooter>
+              </form>
+            </DialogContent>
+          </Dialog>
         </div>
 
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
@@ -68,16 +204,20 @@ export function Websites() {
         </div>
       </div>
     </div>
-  )
+  );
 }
 
 interface WebsiteCardProps {
-  website: Website
-  onTriggerScrape: () => void
-  isScraping: boolean
+  website: Website;
+  onTriggerScrape: () => void;
+  isScraping: boolean;
 }
 
-function WebsiteCard({ website, onTriggerScrape, isScraping }: WebsiteCardProps) {
+function WebsiteCard({
+  website,
+  onTriggerScrape,
+  isScraping,
+}: WebsiteCardProps) {
   return (
     <Card>
       <CardHeader className="pb-3">
@@ -96,8 +236,8 @@ function WebsiteCard({ website, onTriggerScrape, isScraping }: WebsiteCardProps)
               </a>
             </CardDescription>
           </div>
-          <Badge variant={website.is_active ? 'success' : 'secondary'}>
-            {website.is_active ? 'Active' : 'Inactive'}
+          <Badge variant={website.is_active ? "success" : "secondary"}>
+            {website.is_active ? "Active" : "Inactive"}
           </Badge>
         </div>
       </CardHeader>
@@ -112,7 +252,7 @@ function WebsiteCard({ website, onTriggerScrape, isScraping }: WebsiteCardProps)
             <span className="font-medium">
               {website.last_scraped_at
                 ? formatRelativeTime(website.last_scraped_at)
-                : 'Never'}
+                : "Never"}
             </span>
           </div>
           <div className="flex justify-between text-sm">
@@ -140,5 +280,5 @@ function WebsiteCard({ website, onTriggerScrape, isScraping }: WebsiteCardProps)
         </div>
       </CardContent>
     </Card>
-  )
+  );
 }

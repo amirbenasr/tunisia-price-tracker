@@ -83,12 +83,21 @@ export interface SearchResponse {
   search_time_ms: number
 }
 
+export interface SitemapConfig {
+  sitemap_url: string
+  child_sitemap_pattern?: string
+  url_include_pattern?: string
+  url_exclude_pattern?: string
+  use_lastmod?: boolean
+}
+
 export interface ScraperConfig {
   id: string
   website_id: string
   config_type: string
   selectors: Record<string, string>
   pagination_config?: Record<string, unknown>
+  sitemap_config?: SitemapConfig
   version: number
   is_active: boolean
   created_at: string

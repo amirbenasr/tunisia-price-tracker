@@ -15,6 +15,7 @@ from src.core.config import settings
 from src.models import Product, ScraperConfig, ScrapeLog, Website
 from src.models.price import PriceRecord
 from src.scrapers import get_browser_pool, close_browser_pool, get_scraper_for_website
+from src.scrapers.sitemap import SitemapScraper
 
 logger = structlog.get_logger()
 
@@ -76,10 +77,9 @@ async def _scrape_website_async(
             db.add(log)
             await db.commit()
 
-        # Get scraper config
+        # Get scraper config (either product_list or sitemap)
         stmt = select(ScraperConfig).where(
             ScraperConfig.website_id == website.id,
-            ScraperConfig.config_type == "product_list",
             ScraperConfig.is_active == True,
         )
         result = await db.execute(stmt)
@@ -92,17 +92,35 @@ async def _scrape_website_async(
             await db.commit()
             return {"error": "No scraper config found"}
 
-        # Create scraper
-        scraper = get_scraper_for_website(
-            website_name=website.name,
-            scraper_type=website.scraper_type,
-            base_url=website.base_url,
-            config={
-                "selectors": config.selectors,
-                "pagination_config": config.pagination_config,
-            },
-            rate_limit_ms=website.rate_limit_ms,
-        )
+        # Create scraper based on config type
+        if config.config_type == "sitemap":
+            # Sitemap-based scraper
+            scraper = SitemapScraper(
+                website_name=website.name,
+                base_url=website.base_url,
+                sitemap_config=config.sitemap_config or {},
+                selectors=config.selectors or {},
+                rate_limit_ms=website.rate_limit_ms,
+                last_scraped_at=website.last_scraped_at,
+            )
+            logger.info(
+                "Using sitemap scraper",
+                website=website.name,
+                sitemap_url=config.sitemap_config.get("sitemap_url") if config.sitemap_config else None,
+            )
+        else:
+            # CSS-based scraper (product_list)
+            scraper = get_scraper_for_website(
+                website_name=website.name,
+                scraper_type=website.scraper_type,
+                base_url=website.base_url,
+                config={
+                    "selectors": config.selectors,
+                    "pagination_config": config.pagination_config,
+                },
+                rate_limit_ms=website.rate_limit_ms,
+            )
+            logger.info("Using CSS-based scraper", website=website.name)
 
         # Get browser and scrape
         browser_pool = await get_browser_pool()

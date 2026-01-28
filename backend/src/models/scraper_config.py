@@ -37,11 +37,18 @@ class ScraperConfig(BaseModel):
         comment="CSS/XPath selectors for extracting data",
     )
 
-    # Pagination configuration
+    # Pagination configuration (for CSS-based scrapers)
     pagination_config: Mapped[Optional[Dict[str, Any]]] = mapped_column(
         JSONB,
         nullable=True,
         comment="Pagination strategy and selectors",
+    )
+
+    # Sitemap configuration (for sitemap-based scrapers)
+    sitemap_config: Mapped[Optional[Dict[str, Any]]] = mapped_column(
+        JSONB,
+        nullable=True,
+        comment="Sitemap URL and filtering patterns",
     )
 
     # Authentication config if needed
@@ -81,14 +88,20 @@ SELECTOR_CONFIG_EXAMPLE = {
             "max_pages": 50,
         },
     },
-    "product_detail": {
+    "sitemap": {
+        "sitemap_config": {
+            "sitemap_url": "https://www.example.com/sitemap.xml",
+            "child_sitemap_pattern": "sitemap_products",  # For sitemap index
+            "url_include_pattern": "/products/",  # Only URLs containing this
+            "url_exclude_pattern": "/collections|/pages",  # Skip these URLs
+            "use_lastmod": True,  # Enable incremental scraping
+        },
         "selectors": {
-            "name": "h1.product-title",
+            "price": ".product-price .money",
+            "original_price": ".compare-at-price",
             "description": ".product-description",
-            "brand": ".product-brand",
-            "sku": ".product-sku",
-            "ean": ".product-ean",
-            "category": ".breadcrumb li:last-child",
+            "brand": ".product-vendor",
+            "in_stock": ".product-availability",
         },
     },
 }

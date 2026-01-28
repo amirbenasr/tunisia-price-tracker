@@ -15,6 +15,7 @@ from src.schemas.scraper import (
     ScrapeJobResponse,
     ScrapeLogResponse,
 )
+from workers.tasks.scrape import scrape_website as scrape_website_task
 
 router = APIRouter(prefix="/scrapers", tags=["Scrapers"])
 
@@ -134,10 +135,14 @@ async def trigger_scrape(
     # Create scrape log
     log = await scraper_service.create_log(website_id, triggered_by="api")
 
-    # In a real implementation, this would queue a Celery task
-    # For now, return the log ID as the task ID
+    # Dispatch Celery task
+    task = scrape_website_task.delay(str(website_id), str(log.id))
+
+    # Update log with Celery task ID
+    await scraper_service.update_log(log.id, celery_task_id=task.id, status="running")
+
     return ScrapeJobResponse(
-        task_id=str(log.id),
+        task_id=task.id,
         website_id=website_id,
         status="queued",
         message="Scrape job queued successfully. Check /scrapers/{website_id}/logs for status.",

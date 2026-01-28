@@ -38,12 +38,38 @@ class PaginationConfig(BaseSchema):
     wait_ms: int = Field(default=1000, ge=100, description="Wait time between pages")
 
 
+class SitemapConfig(BaseSchema):
+    """Sitemap-based scraper configuration."""
+
+    sitemap_url: str = Field(..., description="URL to the sitemap.xml file")
+    child_sitemap_pattern: Optional[str] = Field(
+        None,
+        description="Regex pattern to filter child sitemaps (e.g., 'sitemap_products' for Shopify)",
+    )
+    url_include_pattern: Optional[str] = Field(
+        None,
+        description="Regex pattern - only include URLs matching this (e.g., '/products/')",
+    )
+    url_exclude_pattern: Optional[str] = Field(
+        None,
+        description="Regex pattern - exclude URLs matching this (e.g., '/collections|/pages')",
+    )
+    use_lastmod: bool = Field(
+        default=True,
+        description="Use lastmod field for incremental scraping",
+    )
+
+
 class ScraperConfigBase(BaseSchema):
     """Base scraper config schema."""
 
-    config_type: str = Field(default="product_list", description="Config type")
+    config_type: str = Field(
+        default="product_list",
+        description="Config type: 'product_list' (CSS-based) or 'sitemap' (sitemap-based)",
+    )
     selectors: Dict[str, Any] = Field(default_factory=dict, description="Selector configuration")
     pagination_config: Optional[Dict[str, Any]] = Field(None, description="Pagination settings")
+    sitemap_config: Optional[Dict[str, Any]] = Field(None, description="Sitemap scraper settings")
     auth_config: Optional[Dict[str, Any]] = Field(None, description="Authentication settings")
     is_active: bool = Field(default=True)
 
@@ -57,8 +83,10 @@ class ScraperConfigCreate(ScraperConfigBase):
 class ScraperConfigUpdate(BaseSchema):
     """Schema for updating scraper config."""
 
+    config_type: Optional[str] = None
     selectors: Optional[Dict[str, Any]] = None
     pagination_config: Optional[Dict[str, Any]] = None
+    sitemap_config: Optional[Dict[str, Any]] = None
     auth_config: Optional[Dict[str, Any]] = None
     is_active: Optional[bool] = None
 
