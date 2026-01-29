@@ -2,16 +2,17 @@
 
 import asyncio
 from datetime import datetime
-from decimal import Decimal
-from typing import Optional
+from typing import Awaitable, Callable, Optional
 from uuid import UUID
 
+import redis.asyncio as aioredis
 import structlog
 from celery import shared_task
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine, async_sessionmaker
 
 from src.core.config import settings
+from src.core.redis import TaskCancellation
 from src.models import Product, ScraperConfig, ScrapeLog, Website
 from src.models.price import PriceRecord
 from src.scrapers import get_browser_pool, close_browser_pool, get_scraper_for_website
@@ -49,6 +50,36 @@ async def _scrape_website_async(
     """Async implementation of website scraping."""
     session_factory = get_async_session()
 
+    # Create Redis client for cancellation checking
+    redis_client = aioredis.from_url(
+        settings.redis_url,
+        encoding="utf-8",
+        decode_responses=True,
+    )
+    cancellation_service = TaskCancellation(redis_client)
+
+    # Async cancellation checker callback for this task
+    async def is_cancelled() -> bool:
+        return await cancellation_service.is_cancelled(task_id)
+
+    try:
+        return await _do_scrape(
+            session_factory, website_id, log_id, task_id, is_cancelled
+        )
+    finally:
+        # Always cleanup Redis connection and cancellation flag
+        await cancellation_service.clear_cancellation(task_id)
+        await redis_client.close()
+
+
+async def _do_scrape(
+    session_factory,
+    website_id: str,
+    log_id: Optional[str],
+    task_id: str,
+    is_cancelled: Callable[[], Awaitable[bool]],
+) -> dict:
+    """Actual scraping logic, separated for cleaner cleanup handling."""
     async with session_factory() as db:
         # Get website
         stmt = select(Website).where(Website.id == UUID(website_id))
@@ -127,7 +158,7 @@ async def _scrape_website_async(
 
         try:
             async with browser_pool.get_page() as page:
-                scrape_result = await scraper.scrape(page, max_pages=50)
+                scrape_result = await scraper.scrape(page, max_pages=50, is_cancelled=is_cancelled)
 
             # Process results
             products_created = 0
@@ -176,8 +207,13 @@ async def _scrape_website_async(
                 db.add(price_record)
                 prices_recorded += 1
 
-            # Update log
-            log.status = "success" if scrape_result.success else "partial"
+            # Update log status based on result
+            if scrape_result.cancelled:
+                log.status = "cancelled"
+            elif scrape_result.success:
+                log.status = "success"
+            else:
+                log.status = "partial"
             log.completed_at = datetime.utcnow()
             log.products_found = len(scrape_result.products)
             log.products_created = products_created

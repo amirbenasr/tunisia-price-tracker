@@ -6,13 +6,16 @@ import re
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from decimal import Decimal, InvalidOperation
-from typing import Any, Dict, List, Optional
+from typing import Any, Awaitable, Callable, Dict, List, Optional, Union
 from urllib.parse import urljoin
 
 import structlog
 from playwright.async_api import Page
 
 logger = structlog.get_logger()
+
+# Type alias for async cancellation checker callback
+CancellationChecker = Callable[[], Awaitable[bool]]
 
 
 @dataclass
@@ -42,6 +45,7 @@ class ScrapeResult:
     pages_scraped: int = 0
     errors: List[Dict[str, Any]] = field(default_factory=list)
     success: bool = True
+    cancelled: bool = False
 
 
 class BaseScraper(ABC):
@@ -64,13 +68,19 @@ class BaseScraper(ABC):
         self.logger = logger.bind(scraper=website_name)
 
     @abstractmethod
-    async def scrape(self, page: Page, max_pages: int = 50) -> ScrapeResult:
+    async def scrape(
+        self,
+        page: Page,
+        max_pages: int = 50,
+        is_cancelled: Optional[CancellationChecker] = None,
+    ) -> ScrapeResult:
         """
         Execute the scraping logic.
 
         Args:
             page: Playwright page instance
             max_pages: Maximum pages to scrape
+            is_cancelled: Optional callback to check if task should stop
 
         Returns:
             ScrapeResult with products and metadata

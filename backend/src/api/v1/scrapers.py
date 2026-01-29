@@ -6,6 +6,7 @@ from uuid import UUID
 from fastapi import APIRouter, HTTPException, Query, status
 
 from src.api.deps import ScraperSvc
+from src.core.redis import TaskCancellation, get_redis
 from src.schemas.common import PaginatedResponse
 from src.schemas.scraper import (
     ScraperConfigCreate,
@@ -16,7 +17,6 @@ from src.schemas.scraper import (
     ScrapeLogResponse,
 )
 from workers.tasks.scrape import scrape_website as scrape_website_task
-from workers.celery_app import celery_app
 
 router = APIRouter(prefix="/scrapers", tags=["Scrapers"])
 
@@ -242,8 +242,8 @@ async def stop_scrape(
     """
     Stop a running scrape job for a website.
 
-    This will attempt to terminate the running task. The job cannot be resumed
-    and will be marked as cancelled.
+    This gracefully stops the task by setting a cancellation flag in Redis.
+    The task will stop at the next page boundary and clean up properly.
     """
     # Get the latest running log
     log = await scraper_service.get_latest_log(website_id)
@@ -260,16 +260,18 @@ async def stop_scrape(
             detail=f"Cannot stop scrape with status '{log.status}'. Only running or queued jobs can be stopped.",
         )
 
-    # Revoke the Celery task
+    # Set cancellation flag in Redis for graceful stop
     if log.celery_task_id:
-        celery_app.control.revoke(log.celery_task_id, terminate=True, signal="SIGTERM")
+        redis_client = await get_redis()
+        cancellation = TaskCancellation(redis_client)
+        await cancellation.request_cancellation(log.celery_task_id)
 
-    # Update log status to cancelled
-    await scraper_service.update_log(log.id, status="cancelled")
+    # Note: We don't update the log status here - the task will update it
+    # to "cancelled" when it detects the flag and stops gracefully
 
     return ScrapeJobResponse(
         task_id=log.celery_task_id or str(log.id),
         website_id=website_id,
-        status="cancelled",
-        message="Scrape job has been stopped.",
+        status="cancelling",
+        message="Cancellation requested. The task will stop at the next page.",
     )

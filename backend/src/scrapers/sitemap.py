@@ -11,7 +11,7 @@ import httpx
 import structlog
 from playwright.async_api import Page, TimeoutError as PlaywrightTimeout
 
-from src.scrapers.base import BaseScraper, ScrapedProduct, ScrapeResult
+from src.scrapers.base import BaseScraper, CancellationChecker, ScrapedProduct, ScrapeResult
 
 logger = structlog.get_logger()
 
@@ -210,13 +210,19 @@ class SitemapScraper(BaseScraper):
         self.last_scraped_at = last_scraped_at
         self.parser = SitemapParser()
 
-    async def scrape(self, page: Page, max_pages: int = 300) -> ScrapeResult:
+    async def scrape(
+        self,
+        page: Page,
+        max_pages: int = 300,
+        is_cancelled: Optional[CancellationChecker] = None,
+    ) -> ScrapeResult:
         """
         Scrape products discovered via sitemap.
 
         Args:
             page: Playwright page instance
             max_pages: Maximum number of product pages to visit
+            is_cancelled: Optional callback to check if task should stop
 
         Returns:
             ScrapeResult with products and metadata
@@ -265,6 +271,16 @@ class SitemapScraper(BaseScraper):
 
         # 4. Visit each product page and extract data
         for i, entry in enumerate(entries):
+            # Check for cancellation before each page
+            if is_cancelled and await is_cancelled():
+                self.logger.info(
+                    "Scrape cancelled by user",
+                    pages_scraped=result.pages_scraped,
+                    products_found=len(result.products),
+                )
+                result.cancelled = True
+                break
+
             try:
                 product = await self._scrape_product_page(page, entry)
                 if product:

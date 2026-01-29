@@ -1,6 +1,9 @@
 """Redis client configuration."""
 
-from typing import Optional
+from typing import Callable, Optional
+
+# Type alias for cancellation checker callback
+CancellationChecker = Callable[[], bool]
 
 import redis.asyncio as redis
 from redis.asyncio import Redis
@@ -59,3 +62,28 @@ class CacheService:
         if ttl and value == 1:
             await self.client.expire(key, ttl)
         return value
+
+
+class TaskCancellation:
+    """Service for managing task cancellation via Redis flags."""
+
+    CANCEL_KEY_PREFIX = "task:cancel:"
+    DEFAULT_TTL = 3600  # 1 hour - cleanup stale flags
+
+    def __init__(self, client: Redis):
+        self.client = client
+
+    def _key(self, task_id: str) -> str:
+        return f"{self.CANCEL_KEY_PREFIX}{task_id}"
+
+    async def request_cancellation(self, task_id: str) -> None:
+        """Set the cancellation flag for a task."""
+        await self.client.set(self._key(task_id), "1", ex=self.DEFAULT_TTL)
+
+    async def is_cancelled(self, task_id: str) -> bool:
+        """Check if a task has been requested to cancel."""
+        return await self.client.exists(self._key(task_id)) > 0
+
+    async def clear_cancellation(self, task_id: str) -> None:
+        """Clear the cancellation flag (after task completes)."""
+        await self.client.delete(self._key(task_id))

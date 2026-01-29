@@ -2,12 +2,12 @@
 
 import asyncio
 from decimal import Decimal
-from typing import Any, Dict, List, Optional
+from typing import Any, Callable, Dict, List, Optional
 
 import structlog
 from playwright.async_api import Page, TimeoutError as PlaywrightTimeout
 
-from src.scrapers.base import BaseScraper, ScrapedProduct, ScrapeResult
+from src.scrapers.base import BaseScraper, CancellationChecker, ScrapedProduct, ScrapeResult
 
 logger = structlog.get_logger()
 
@@ -32,7 +32,12 @@ class ConfigDrivenScraper(BaseScraper):
         self.selectors = selectors
         self.pagination_config = pagination_config or {}
 
-    async def scrape(self, page: Page, max_pages: int = 50) -> ScrapeResult:
+    async def scrape(
+        self,
+        page: Page,
+        max_pages: int = 50,
+        is_cancelled: Optional[CancellationChecker] = None,
+    ) -> ScrapeResult:
         """Scrape products using configured selectors."""
         result = ScrapeResult()
         current_url = self.base_url
@@ -44,6 +49,15 @@ class ConfigDrivenScraper(BaseScraper):
         wait_for_selector = self.selectors.get("wait_for_selector")
 
         while pages_scraped < max_pages:
+            # Check for cancellation before each page
+            if is_cancelled and await is_cancelled():
+                self.logger.info(
+                    "Scrape cancelled by user",
+                    pages_scraped=pages_scraped,
+                    products_found=len(result.products),
+                )
+                result.cancelled = True
+                break
             try:
                 # Navigate to page with configured wait strategy
                 if wait_for_selector:
